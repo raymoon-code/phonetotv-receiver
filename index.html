@@ -211,6 +211,10 @@
         var pairCode = '';
         var isPhoneConnected = false;
         var lastHeartbeatTime = Date.now();
+        var sseTimeout = null;
+        var sseConnectedOnce = false;
+        var processedMsgIds = {};
+        var isShortPollingActive = false;
 
         // 1. Tạo mã ngẫu nhiên 4 chữ số
         function generateCode() {
@@ -228,7 +232,7 @@
                     method: 'POST',
                     body: bodyString,
                     headers: {
-                        'Content-Type': 'text/plain; charset=utf-8'
+                        'Content-Type': 'text/plain'
                     }
                 })['catch'](function(err) {
                     console.error("Lỗi gửi HTTP POST (fetch):", err);
@@ -236,9 +240,9 @@
             } else {
                 var xhr = new XMLHttpRequest();
                 xhr.open('POST', url, true);
-                xhr.setRequestHeader('Content-Type', 'text/plain; charset=utf-8');
+                xhr.setRequestHeader('Content-Type', 'text/plain');
                 xhr.onreadystatechange = function() {
-                    if (xhr.readyState === 4 && xhr.status !== 200) {
+                    if (xhr.readyState === 4 && xhr.status !== 200 && xhr.status !== 201) {
                         console.error("Lỗi gửi HTTP POST (XHR): status " + xhr.status);
                     }
                 };
@@ -251,6 +255,9 @@
             if (sse) {
                 try { sse.close(); } catch(e) {}
             }
+            if (sseTimeout) {
+                clearTimeout(sseTimeout);
+            }
             
             var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
             var sseUrl = 'https://ntfy.adminforge.de/' + topic + '/json';
@@ -260,9 +267,21 @@
             if (typeof EventSource !== 'undefined') {
                 sse = new EventSource(sseUrl);
                 
+                // Sau 4 giây nếu SSE chưa hoạt động, tự động chuyển sang Short Polling
+                sseTimeout = setTimeout(function() {
+                    if (!sseConnectedOnce) {
+                        console.warn("SSE không phản hồi sau 4s. Fallback sang Short Polling.");
+                        try { sse.close(); } catch(e) {}
+                        statusText.innerText = 'CHẾ ĐỘ SHORT POLLING (DỰ PHÒNG)...';
+                        startShortPolling();
+                    }
+                }, 4000);
+                
                 sse.onopen = function() {
                     console.log("Kênh tín hiệu SSE đã mở.");
-                    // Gửi tin nhắn nhịp tim đầu tiên lập tức để điện thoại nhận dạng ngay
+                    sseConnectedOnce = true;
+                    if (sseTimeout) clearTimeout(sseTimeout);
+                    
                     sendStatusToPhone({
                         type: 'heartbeat',
                         status: 'idle',
@@ -271,9 +290,18 @@
                 };
                 
                 sse.onmessage = function(event) {
+                    sseConnectedOnce = true;
+                    if (sseTimeout) clearTimeout(sseTimeout);
                     try {
                         var msg = JSON.parse(event.data);
                         if (msg.event === 'message' && msg.message) {
+                            // Lọc trùng theo id
+                            if (msg.id) {
+                                if (processedMsgIds[msg.id]) {
+                                    return;
+                                }
+                                processedMsgIds[msg.id] = true;
+                            }
                             var payload = JSON.parse(msg.message);
                             handleControlCommand(payload);
                         }
@@ -284,11 +312,18 @@
                 
                 sse.onerror = function() {
                     console.warn("Mất kết nối server tín hiệu. Đang kết nối lại...");
-                    statusText.innerText = 'MẤT KẾT NỐI - ĐANG THỬ LẠI...';
-                    statusDot.className = 'status-dot';
+                    if (!sseConnectedOnce) {
+                        console.warn("SSE gặp lỗi kết nối ban đầu. Fallback sang Short Polling lập tức.");
+                        try { sse.close(); } catch(e) {}
+                        if (sseTimeout) clearTimeout(sseTimeout);
+                        statusText.innerText = 'CHẾ ĐỘ SHORT POLLING...';
+                        startShortPolling();
+                    } else {
+                        statusText.innerText = 'MẤT KẾT NỐI - ĐANG THỬ LẠI...';
+                        statusDot.className = 'status-dot';
+                    }
                 };
             } else {
-                // TV quá cũ không hỗ trợ EventSource -> Chuyển sang Short Polling (3 giây một lần)
                 console.warn("Trình duyệt không hỗ trợ EventSource. Dùng cơ chế Short Polling.");
                 statusText.innerText = 'CHẾ ĐỘ SHORT POLLING...';
                 startShortPolling();
@@ -340,7 +375,10 @@
 
         // Cơ chế Short Polling thay thế cho SSE nếu TV không hỗ trợ
         function startShortPolling() {
-            setInterval(function() {
+            if (isShortPollingActive) return;
+            isShortPollingActive = true;
+            
+            var pollFunc = function() {
                 var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
                 var pollUrl = 'https://ntfy.adminforge.de/' + topic + '/json?poll=1';
                 
@@ -356,6 +394,13 @@
                                 if (!line) continue;
                                 var msg = JSON.parse(line);
                                 if (msg.event === 'message' && msg.message) {
+                                    // Lọc trùng theo id
+                                    if (msg.id) {
+                                        if (processedMsgIds[msg.id]) {
+                                            continue;
+                                        }
+                                        processedMsgIds[msg.id] = true;
+                                    }
                                     var payload = JSON.parse(msg.message);
                                     handleControlCommand(payload);
                                 }
@@ -366,7 +411,10 @@
                     }
                 };
                 xhr.send();
-            }, 3000);
+            };
+            
+            pollFunc();
+            setInterval(pollFunc, 3000);
         }
 
         // 5. Xử lý các lệnh điều khiển từ điện thoại gửi xuống
