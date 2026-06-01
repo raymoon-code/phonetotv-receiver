@@ -370,7 +370,16 @@
                 statusText.innerText = 'ĐÃ ĐỒNG BỘ ĐIỆN THOẠI';
             }
             
-            if (cmd.action === 'play') {
+            if (cmd.action === 'ping') {
+                sendStatusToPhone({
+                    type: 'heartbeat',
+                    status: video.style.display === 'block' ? (video.paused ? 'paused' : 'playing') : 'idle',
+                    currentTime: video.currentTime,
+                    duration: video.duration || 0,
+                    speed: video.playbackRate,
+                    tv_connected: true
+                });
+            } else if (cmd.action === 'play') {
                 if (cmd.url) {
                     loadAndPlayVideo(cmd.url, cmd.startTime || 0);
                 } else {
