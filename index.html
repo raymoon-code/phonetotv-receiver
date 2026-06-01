@@ -207,7 +207,7 @@
         };
         
         var hls = null;
-        var sse = null;
+        var ws = null;
         var pairCode = '';
         var isPhoneConnected = false;
         var lastHeartbeatTime = Date.now();
@@ -246,21 +246,31 @@
             }
         }
 
-        // 2. Thiết lập kênh tín hiệu (Signaling Channel) qua ntfy.sh SSE (Server-Sent Events)
+        // 2. Thiết lập kênh tín hiệu (Signaling Channel) qua ntfy.sh WebSocket
         function initSignaling() {
-            if (sse) {
-                try { sse.close(); } catch(e) {}
+            if (ws) {
+                try { ws.close(); } catch(e) {}
             }
             
             var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
-            var sseUrl = 'https://ntfy.sh/' + topic + '/json';
+            var wsUrl = 'wss://ntfy.sh/' + topic + '/ws';
             
-            console.log("Subscribing to: " + sseUrl);
+            console.log("Connecting WebSocket to: " + wsUrl);
             
-            if (typeof EventSource !== 'undefined') {
-                sse = new EventSource(sseUrl);
+            try {
+                ws = new WebSocket(wsUrl);
                 
-                sse.onmessage = function(event) {
+                ws.onopen = function() {
+                    console.log("Kênh tín hiệu WebSocket đã kết nối.");
+                    // Gửi tin nhắn nhịp tim đầu tiên lập tức để điện thoại nhận dạng ngay
+                    sendStatusToPhone({
+                        type: 'heartbeat',
+                        status: 'idle',
+                        tv_connected: true
+                    });
+                };
+                
+                ws.onmessage = function(event) {
                     try {
                         var msg = JSON.parse(event.data);
                         if (msg.event === 'message' && msg.message) {
@@ -268,28 +278,23 @@
                             handleControlCommand(payload);
                         }
                     } catch (e) {
-                        console.error("Lỗi phân tích tin nhắn từ ntfy:", e);
+                        console.error("Lỗi phân tích tin nhắn từ WebSocket:", e);
                     }
                 };
                 
-                sse.onerror = function() {
-                    console.warn("Mất kết nối server tín hiệu. Đang kết nối lại...");
+                ws.onclose = function() {
+                    console.warn("Mất kết nối WebSocket. Đang kết nối lại sau 3s...");
                     statusText.innerText = 'MẤT KẾT NỐI - ĐANG THỬ LẠI...';
                     statusDot.className = 'status-dot';
+                    setTimeout(initSignaling, 3000);
                 };
-            } else {
-                // TV quá cũ không hỗ trợ EventSource -> Chuyển sang Short Polling (3 giây một lần)
-                console.warn("Trình duyệt không hỗ trợ EventSource. Dùng cơ chế Short Polling.");
-                statusText.innerText = 'CHẾ ĐỘ SHORT POLLING...';
-                startShortPolling();
+                
+                ws.onerror = function(err) {
+                    console.error("Lỗi kết nối WebSocket:", err);
+                };
+            } catch (e) {
+                console.error("Không thể tạo WebSocket:", e);
             }
-            
-            // Gửi tin nhắn nhịp tim đầu tiên lập tức để điện thoại nhận dạng ngay
-            sendStatusToPhone({
-                type: 'heartbeat',
-                status: 'idle',
-                tv_connected: true
-            });
             
             // Bắt đầu gửi nhịp tim (Heartbeat) định kỳ
             startHeartbeat();
@@ -326,37 +331,6 @@
                     });
                 }
             }, 1500);
-        }
-
-        // Cơ chế Short Polling thay thế cho SSE nếu TV không hỗ trợ
-        function startShortPolling() {
-            setInterval(function() {
-                var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
-                var pollUrl = 'https://ntfy.sh/' + topic + '/json?poll=1';
-                
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', pollUrl, true);
-                xhr.onreadystatechange = function() {
-                    if (xhr.readyState === 4 && xhr.status === 200) {
-                        try {
-                            var responseText = xhr.responseText;
-                            var lines = responseText.split('\n');
-                            for (var i = 0; i < lines.length; i++) {
-                                var line = lines[i].trim();
-                                if (!line) continue;
-                                var msg = JSON.parse(line);
-                                if (msg.event === 'message' && msg.message) {
-                                    var payload = JSON.parse(msg.message);
-                                    handleControlCommand(payload);
-                                }
-                            }
-                        } catch(e) {
-                            console.error("Lỗi short poll:", e);
-                        }
-                    }
-                };
-                xhr.send();
-            }, 3000);
         }
 
         // 5. Xử lý các lệnh điều khiển từ điện thoại gửi xuống
