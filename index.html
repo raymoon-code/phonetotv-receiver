@@ -155,12 +155,56 @@
         </div>
     </div>
 
+    <!-- On-screen Developer Console for Smart TV debugging -->
+    <div id="debugConsole" style="position: absolute; bottom: 10px; left: 10px; right: 10px; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.85); color: #10b981; font-family: monospace; font-size: 11px; padding: 12px; border-radius: 12px; z-index: 100; text-align: left; border: 1px solid rgba(16, 185, 129, 0.25); display: none; word-break: break-all; pointer-events: none;"></div>
+
     <script>
         var video = document.getElementById('videoPlayer');
         var pairingUI = document.getElementById('pairingUI');
         var codeDisplay = document.getElementById('codeDisplay');
         var statusDot = document.getElementById('statusDot');
         var statusText = document.getElementById('statusText');
+        var debugConsole = document.getElementById('debugConsole');
+        
+        function logToScreen(msg, type) {
+            debugConsole.style.display = 'block';
+            var div = document.createElement('div');
+            var color = '#10b981'; // Green
+            if (type === 'error') color = '#ef4444'; // Red
+            if (type === 'warn') color = '#f59e0b'; // Yellow
+            div.style.color = color;
+            div.style.marginBottom = '4px';
+            div.innerText = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+            debugConsole.appendChild(div);
+            debugConsole.scrollTop = debugConsole.scrollHeight;
+        }
+
+        // Hook console methods
+        var _log = console.log;
+        var _error = console.error;
+        var _warn = console.warn;
+        
+        console.log = function() {
+            var args = Array.prototype.slice.call(arguments);
+            _log.apply(console, args);
+            logToScreen(args.join(' '), 'log');
+        };
+        console.error = function() {
+            var args = Array.prototype.slice.call(arguments);
+            _error.apply(console, args);
+            logToScreen(args.join(' '), 'error');
+        };
+        console.warn = function() {
+            var args = Array.prototype.slice.call(arguments);
+            _warn.apply(console, args);
+            logToScreen(args.join(' '), 'warn');
+        };
+
+        // Window error tracking
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error("Runtime: " + message + " at " + source + ":" + lineno);
+            return false;
+        };
         
         var hls = null;
         var sse = null;
@@ -343,7 +387,14 @@
 
         // 6. Hàm tải video và giải mã (hỗ trợ cả HLS qua Hls.js và MP4 trực tiếp)
         function loadAndPlayVideo(url, startTime) {
-            console.log("Tải video: " + url + " từ giây: " + startTime);
+            // Tự động nâng cấp sang HTTPS nếu trang chính chạy trên HTTPS nhằm tránh lỗi Mixed Content
+            if (window.location.protocol === 'https:' && url.indexOf('http://') === 0) {
+                var secureUrl = url.replace('http://', 'https://');
+                console.warn("Đang tự động nâng cấp URL sang HTTPS để tránh lỗi Mixed Content: " + secureUrl);
+                url = secureUrl;
+            }
+            
+            console.log("Bắt đầu tải video: " + url + " từ giây: " + startTime);
             
             // Hiển thị khung video, ẩn giao diện ghép đôi
             video.style.display = 'block';
@@ -372,7 +423,7 @@
                         video.play();
                     });
                     hls.on(Hls.Events.ERROR, function(event, data) {
-                        console.error("Lỗi giải mã HLS:", data);
+                        console.error("Lỗi giải mã HLS: " + data.type + " - " + data.details);
                     });
                 } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                     // Hỗ trợ HLS mặc định (Safari trên iOS hoặc một số Smart TV cũ)
@@ -397,6 +448,19 @@
                 });
             }
         }
+
+        // Bắt lỗi thẻ video
+        video.addEventListener('error', function() {
+            var err = video.error;
+            var errMsg = "Lỗi video không xác định.";
+            if (err) {
+                if (err.code === 1) errMsg = "Phát video bị hủy ngang.";
+                else if (err.code === 2) errMsg = "Lỗi kết nối mạng khi tải video (kiểm tra link / CORS / Chặn HTTPS).";
+                else if (err.code === 3) errMsg = "Lỗi giải mã định dạng video.";
+                else if (err.code === 4) errMsg = "Link video không hỗ trợ hoặc bị chặn (Mixed Content/Expired/CORS).";
+            }
+            console.error("LỖI PHÁT PHIM: " + errMsg + " (Mã lỗi: " + (err ? err.code : 'unknown') + ")");
+        });
 
         // Tự động quay lại giao diện ghép đôi nếu video bị tắt hoặc kết thúc
         video.addEventListener('ended', function() {
