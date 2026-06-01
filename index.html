@@ -184,7 +184,7 @@
                     method: 'POST',
                     body: bodyString,
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'text/plain; charset=utf-8'
                     }
                 })['catch'](function(err) {
                     console.error("Lỗi gửi HTTP POST (fetch):", err);
@@ -192,7 +192,7 @@
             } else {
                 var xhr = new XMLHttpRequest();
                 xhr.open('POST', url, true);
-                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.setRequestHeader('Content-Type', 'text/plain; charset=utf-8');
                 xhr.onreadystatechange = function() {
                     if (xhr.readyState === 4 && xhr.status !== 200) {
                         console.error("Lỗi gửi HTTP POST (XHR): status " + xhr.status);
