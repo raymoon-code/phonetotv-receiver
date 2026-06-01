@@ -240,6 +240,13 @@
                 startShortPolling();
             }
             
+            // Gửi tin nhắn nhịp tim đầu tiên lập tức để điện thoại nhận dạng ngay
+            sendStatusToPhone({
+                type: 'heartbeat',
+                status: 'idle',
+                tv_connected: true
+            });
+            
             // Bắt đầu gửi nhịp tim (Heartbeat) định kỳ
             startHeartbeat();
         }
