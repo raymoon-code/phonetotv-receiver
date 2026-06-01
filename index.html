@@ -156,17 +156,17 @@
     </div>
 
     <script>
-        const video = document.getElementById('videoPlayer');
-        const pairingUI = document.getElementById('pairingUI');
-        const codeDisplay = document.getElementById('codeDisplay');
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
+        var video = document.getElementById('videoPlayer');
+        var pairingUI = document.getElementById('pairingUI');
+        var codeDisplay = document.getElementById('codeDisplay');
+        var statusDot = document.getElementById('statusDot');
+        var statusText = document.getElementById('statusText');
         
-        let hls = null;
-        let sse = null;
-        let pairCode = '';
-        let isPhoneConnected = false;
-        let lastHeartbeatTime = Date.now();
+        var hls = null;
+        var sse = null;
+        var pairCode = '';
+        var isPhoneConnected = false;
+        var lastHeartbeatTime = Date.now();
 
         // 1. Tạo mã ngẫu nhiên 4 chữ số
         function generateCode() {
@@ -176,33 +176,69 @@
             initSignaling();
         }
 
+        // Helper gửi HTTP POST tương thích ngược (fetch hoặc XHR)
+        function httpPost(url, payload) {
+            var bodyString = JSON.stringify(payload);
+            if (window.fetch) {
+                fetch(url, {
+                    method: 'POST',
+                    body: bodyString,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })['catch'](function(err) {
+                    console.error("Lỗi gửi HTTP POST (fetch):", err);
+                });
+            } else {
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', url, true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4 && xhr.status !== 200) {
+                        console.error("Lỗi gửi HTTP POST (XHR): status " + xhr.status);
+                    }
+                };
+                xhr.send(bodyString);
+            }
+        }
+
         // 2. Thiết lập kênh tín hiệu (Signaling Channel) qua ntfy.sh SSE (Server-Sent Events)
         function initSignaling() {
-            if (sse) sse.close();
+            if (sse) {
+                try { sse.close(); } catch(e) {}
+            }
             
-            const topic = `ntfy-phonetotv-${pairCode}-tv`;
-            const sseUrl = `https://ntfy.sh/${topic}/json`;
+            var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
+            var sseUrl = 'https://ntfy.sh/' + topic + '/json';
             
-            console.log(`Subscribing to: ${sseUrl}`);
-            sse = new EventSource(sseUrl);
+            console.log("Subscribing to: " + sseUrl);
             
-            sse.onmessage = function(event) {
-                try {
-                    const msg = JSON.parse(event.data);
-                    if (msg.event === 'message' && msg.message) {
-                        const payload = JSON.parse(msg.message);
-                        handleControlCommand(payload);
+            if (typeof EventSource !== 'undefined') {
+                sse = new EventSource(sseUrl);
+                
+                sse.onmessage = function(event) {
+                    try {
+                        var msg = JSON.parse(event.data);
+                        if (msg.event === 'message' && msg.message) {
+                            var payload = JSON.parse(msg.message);
+                            handleControlCommand(payload);
+                        }
+                    } catch (e) {
+                        console.error("Lỗi phân tích tin nhắn từ ntfy:", e);
                     }
-                } catch (e) {
-                    console.error("Lỗi phân tích tin nhắn từ ntfy:", e);
-                }
-            };
-            
-            sse.onerror = function() {
-                console.warn("Mất kết nối server tín hiệu. Đang kết nối lại...");
-                statusText.innerText = 'MẤT KẾT NỐI - ĐANG THỬ LẠI...';
-                statusDot.className = 'status-dot';
-            };
+                };
+                
+                sse.onerror = function() {
+                    console.warn("Mất kết nối server tín hiệu. Đang kết nối lại...");
+                    statusText.innerText = 'MẤT KẾT NỐI - ĐANG THỬ LẠI...';
+                    statusDot.className = 'status-dot';
+                };
+            } else {
+                // TV quá cũ không hỗ trợ EventSource -> Chuyển sang Short Polling (3 giây một lần)
+                console.warn("Trình duyệt không hỗ trợ EventSource. Dùng cơ chế Short Polling.");
+                statusText.innerText = 'CHẾ ĐỘ SHORT POLLING...';
+                startShortPolling();
+            }
             
             // Bắt đầu gửi nhịp tim (Heartbeat) định kỳ
             startHeartbeat();
@@ -210,20 +246,14 @@
 
         // 3. Gửi tin nhắn trạng thái lên ntfy.sh (TV -> Điện thoại)
         function sendStatusToPhone(payload) {
-            const topic = `ntfy-phonetotv-${pairCode}-phone`;
-            fetch(`https://ntfy.sh/${topic}`, {
-                method: 'POST',
-                body: JSON.stringify(payload),
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            }).catch(err => console.error("Lỗi gửi trạng thái lên Cloud:", err));
+            var topic = 'ntfy-phonetotv-' + pairCode + '-phone';
+            httpPost('https://ntfy.sh/' + topic, payload);
         }
 
         // 4. Nhịp tim (Heartbeat) và cập nhật tiến trình phát
         function startHeartbeat() {
             // Gửi heartbeat định kỳ 5s khi rảnh
-            setInterval(() => {
+            setInterval(function() {
                 if (video.style.display !== 'block') {
                     sendStatusToPhone({
                         type: 'heartbeat',
@@ -234,7 +264,7 @@
             }, 5000);
             
             // Gửi tiến trình phát phim định kỳ 1.5s khi đang phát
-            setInterval(() => {
+            setInterval(function() {
                 if (video.style.display === 'block') {
                     sendStatusToPhone({
                         type: 'status',
@@ -244,7 +274,38 @@
                         speed: video.playbackRate
                     });
                 }
-            }, 15000 / 10); // 1.5s
+            }, 1500);
+        }
+
+        // Cơ chế Short Polling thay thế cho SSE nếu TV không hỗ trợ
+        function startShortPolling() {
+            setInterval(function() {
+                var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
+                var pollUrl = 'https://ntfy.sh/' + topic + '/json?poll=1';
+                
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', pollUrl, true);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4 && xhr.status === 200) {
+                        try {
+                            var responseText = xhr.responseText;
+                            var lines = responseText.split('\n');
+                            for (var i = 0; i < lines.length; i++) {
+                                var line = lines[i].trim();
+                                if (!line) continue;
+                                var msg = JSON.parse(line);
+                                if (msg.event === 'message' && msg.message) {
+                                    var payload = JSON.parse(msg.message);
+                                    handleControlCommand(payload);
+                                }
+                            }
+                        } catch(e) {
+                            console.error("Lỗi short poll:", e);
+                        }
+                    }
+                };
+                xhr.send();
+            }, 3000);
         }
 
         // 5. Xử lý các lệnh điều khiển từ điện thoại gửi xuống
@@ -275,7 +336,7 @@
 
         // 6. Hàm tải video và giải mã (hỗ trợ cả HLS qua Hls.js và MP4 trực tiếp)
         function loadAndPlayVideo(url, startTime) {
-            console.log(`Tải video: ${url} từ giây: ${startTime}`);
+            console.log("Tải video: " + url + " từ giây: " + startTime);
             
             // Hiển thị khung video, ẩn giao diện ghép đôi
             video.style.display = 'block';
@@ -287,10 +348,10 @@
                 hls = null;
             }
             
-            const isHLS = url.includes('.m3u8') || url.includes('m3u8');
+            var isHLS = url.indexOf('.m3u8') !== -1 || url.indexOf('m3u8') !== -1;
             
             if (isHLS) {
-                if (Hls.isSupported()) {
+                if (typeof Hls !== 'undefined' && Hls.isSupported()) {
                     hls = new Hls({
                         enableWorker: true,
                         lowLatencyMode: true
@@ -331,7 +392,7 @@
         }
 
         // Tự động quay lại giao diện ghép đôi nếu video bị tắt hoặc kết thúc
-        video.addEventListener('ended', () => {
+        video.addEventListener('ended', function() {
             video.style.display = 'none';
             pairingUI.style.display = 'block';
         });
