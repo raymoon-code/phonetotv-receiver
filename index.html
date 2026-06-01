@@ -246,14 +246,14 @@
             }
         }
 
-        // 2. Thiết lập kênh tín hiệu (Signaling Channel) qua ntfy.sh SSE (Server-Sent Events)
+        // 2. Thiết lập kênh tín hiệu (Signaling Channel) qua ntfy.adminforge.de SSE (Server-Sent Events)
         function initSignaling() {
             if (sse) {
                 try { sse.close(); } catch(e) {}
             }
             
             var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
-            var sseUrl = 'https://ntfy.sh/' + topic + '/json';
+            var sseUrl = 'https://ntfy.adminforge.de/' + topic + '/json';
             
             console.log("Subscribing to: " + sseUrl);
             
@@ -305,10 +305,10 @@
             startHeartbeat();
         }
 
-        // 3. Gửi tin nhắn trạng thái lên ntfy.sh (TV -> Điện thoại)
+        // 3. Gửi tin nhắn trạng thái lên ntfy.adminforge.de (TV -> Điện thoại)
         function sendStatusToPhone(payload) {
             var topic = 'ntfy-phonetotv-' + pairCode + '-phone';
-            httpPost('https://ntfy.sh/' + topic, payload);
+            httpPost('https://ntfy.adminforge.de/' + topic, payload);
         }
 
         // 4. Nhịp tim (Heartbeat) và cập nhật tiến trình phát
@@ -342,7 +342,7 @@
         function startShortPolling() {
             setInterval(function() {
                 var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
-                var pollUrl = 'https://ntfy.sh/' + topic + '/json?poll=1';
+                var pollUrl = 'https://ntfy.adminforge.de/' + topic + '/json?poll=1';
                 
                 var xhr = new XMLHttpRequest();
                 xhr.open('GET', pollUrl, true);
