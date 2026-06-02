@@ -241,27 +241,33 @@
             initSignaling();
         }
 
-        // Helper gửi dữ liệu bằng Image Beacon (vượt qua hoàn toàn 100% rào cản CORS/XHR trên TV cổ)
+        // Helper gửi dữ liệu bằng fetch POST no-cors (đúng chuẩn ntfy API và bypass CORS trên TV cổ)
         function httpPost(url, payload) {
             var bodyString = typeof payload === 'string' ? payload : JSON.stringify(payload);
-            var encodedMessage = encodeURIComponent(bodyString);
-            var getUrl = url + '?message=' + encodedMessage;
+            console.log("Sending status to phone: " + bodyString);
             
-            // Tạo ảnh ẩn và chèn vào DOM để ép trình duyệt TV phải gửi request đi lập tức
-            var beacon = document.createElement('img');
-            beacon.style.display = 'none';
-            beacon.style.width = '0px';
-            beacon.style.height = '0px';
-            
-            beacon.onload = function() {
-                try { document.body.removeChild(beacon); } catch(e) {}
-            };
-            beacon.onerror = function() {
-                try { document.body.removeChild(beacon); } catch(e) {}
-            };
-            
-            beacon.src = getUrl;
-            document.body.appendChild(beacon);
+            if (typeof fetch !== 'undefined') {
+                fetch(url, {
+                    method: 'POST',
+                    body: bodyString,
+                    mode: 'no-cors',
+                    headers: {
+                        'Content-Type': 'text/plain; charset=utf-8'
+                    }
+                }).catch(function(e) {
+                    console.error("Fetch sending error:", e);
+                });
+            } else {
+                // Fallback XMLHTTP if fetch is absent
+                try {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('POST', url, true);
+                    xhr.setRequestHeader('Content-Type', 'text/plain; charset=utf-8');
+                    xhr.send(bodyString);
+                } catch(e) {
+                    console.error("XHR sending error:", e);
+                }
+            }
         }
 
         // 2. Thiết lập kênh tín hiệu (Signaling Channel) qua ntfy.tedomum.fr SSE (Server-Sent Events)
