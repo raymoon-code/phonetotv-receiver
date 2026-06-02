@@ -572,6 +572,33 @@
             var isHLS = url.indexOf('.m3u8') !== -1 || url.indexOf('m3u8') !== -1;
             
             if (isHLS) {
+                var useNativeHLS = function() {
+                    console.log("Kích hoạt dự phòng: Sử dụng trình phát HLS gốc của TV.");
+                    if (hls) {
+                        try { hls.destroy(); } catch(e) {}
+                        hls = null;
+                    }
+                    video.src = url;
+                    
+                    var playStarted = false;
+                    var onMetadata = function() {
+                        if (startTime > 0) {
+                            video.currentTime = startTime;
+                        }
+                        video.play();
+                        playStarted = true;
+                        video.removeEventListener('loadedmetadata', onMetadata);
+                    };
+                    video.addEventListener('loadedmetadata', onMetadata);
+                    
+                    // Fallback play trigger if metadata is delayed
+                    setTimeout(function() {
+                        if (!playStarted) {
+                            video.play();
+                        }
+                    }, 2000);
+                };
+
                 if (typeof Hls !== 'undefined' && Hls.isSupported()) {
                     hls = new Hls({
                         enableWorker: true,
@@ -587,16 +614,14 @@
                     });
                     hls.on(Hls.Events.ERROR, function(event, data) {
                         console.error("Lỗi giải mã HLS: " + data.type + " - " + data.details);
-                    });
-                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    // Hỗ trợ HLS mặc định (Safari trên iOS hoặc một số Smart TV cũ)
-                    video.src = url;
-                    video.addEventListener('loadedmetadata', function() {
-                        if (startTime > 0) {
-                            video.currentTime = startTime;
+                        if (data.fatal) {
+                            console.warn("Lỗi nghiêm trọng. Đang thử dự phòng phát gốc...");
+                            useNativeHLS();
                         }
-                        video.play();
                     });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl') || true) {
+                    // Force native HLS player as general fallback on all other Smart TVs
+                    useNativeHLS();
                 } else {
                     alert("Trình duyệt TV này không hỗ trợ giải mã luồng video HLS.");
                 }
