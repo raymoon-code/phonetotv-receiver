@@ -346,10 +346,56 @@
             httpPost('https://ntfy.adminforge.de/' + topic, payload);
         }
 
+        var lastSentStatus = '';
+        var lastSentTime = -1;
+        var progressInterval = null;
+        var heartbeatInterval = null;
+
+        function sendVideoStatus(force) {
+            if (video.style.display !== 'block') return;
+            
+            var currentStatus = video.paused ? 'paused' : 'playing';
+            var currentTime = video.currentTime;
+            
+            if (!force) {
+                if (currentStatus === lastSentStatus && Math.abs(currentTime - lastSentTime) < 4) {
+                    return;
+                }
+            }
+            
+            lastSentStatus = currentStatus;
+            lastSentTime = currentTime;
+            
+            sendStatusToPhone({
+                type: 'status',
+                status: currentStatus,
+                currentTime: currentTime,
+                duration: video.duration || 0,
+                speed: video.playbackRate
+            });
+        }
+
+        function startProgressUpdates() {
+            stopProgressUpdates();
+            progressInterval = setInterval(function() {
+                sendVideoStatus(false);
+            }, 5000);
+        }
+
+        function stopProgressUpdates() {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+        }
+
         // 4. Nhịp tim (Heartbeat) và cập nhật tiến trình phát
         function startHeartbeat() {
-            // Gửi heartbeat định kỳ 5s khi rảnh
-            setInterval(function() {
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+            }
+            // Gửi heartbeat định kỳ 15s khi rảnh
+            heartbeatInterval = setInterval(function() {
                 if (video.style.display !== 'block') {
                     sendStatusToPhone({
                         type: 'heartbeat',
@@ -357,20 +403,7 @@
                         tv_connected: true
                     });
                 }
-            }, 5000);
-            
-            // Gửi tiến trình phát phim định kỳ 1.5s khi đang phát
-            setInterval(function() {
-                if (video.style.display === 'block') {
-                    sendStatusToPhone({
-                        type: 'status',
-                        status: video.paused ? 'paused' : 'playing',
-                        currentTime: video.currentTime,
-                        duration: video.duration || 0,
-                        speed: video.playbackRate
-                    });
-                }
-            }, 1500);
+            }, 15000);
         }
 
         // Cơ chế Short Polling thay thế cho SSE nếu TV không hỗ trợ
@@ -414,7 +447,7 @@
             };
             
             pollFunc();
-            setInterval(pollFunc, 3000);
+            setInterval(pollFunc, 5000);
         }
 
         // 5. Xử lý các lệnh điều khiển từ điện thoại gửi xuống
@@ -515,6 +548,22 @@
                 });
             }
         }
+
+        // Lắng nghe sự kiện video để gửi trạng thái ngay lập tức (Event-driven)
+        video.addEventListener('play', function() {
+            sendVideoStatus(true);
+            startProgressUpdates();
+        });
+        video.addEventListener('pause', function() {
+            sendVideoStatus(true);
+            stopProgressUpdates();
+        });
+        video.addEventListener('seeking', function() {
+            sendVideoStatus(true);
+        });
+        video.addEventListener('ratechange', function() {
+            sendVideoStatus(true);
+        });
 
         // Bắt lỗi thẻ video
         video.addEventListener('error', function() {
