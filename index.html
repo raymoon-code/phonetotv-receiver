@@ -241,19 +241,30 @@
             initSignaling();
         }
 
-        // Helper gửi HTTP qua GET (tránh preflight CORS và lỗi chặn POST trên TV cũ)
         // Helper gửi dữ liệu bằng Image Beacon (vượt qua hoàn toàn 100% rào cản CORS/XHR trên TV cổ)
         function httpPost(url, payload) {
             var bodyString = typeof payload === 'string' ? payload : JSON.stringify(payload);
             var encodedMessage = encodeURIComponent(bodyString);
             var getUrl = url + '?message=' + encodedMessage;
             
-            // Tạo ảnh ẩn để gửi request GET chéo trang mà không bị CORS chặn
-            var beacon = new Image();
+            // Tạo ảnh ẩn và chèn vào DOM để ép trình duyệt TV phải gửi request đi lập tức
+            var beacon = document.createElement('img');
+            beacon.style.display = 'none';
+            beacon.style.width = '0px';
+            beacon.style.height = '0px';
+            
+            beacon.onload = function() {
+                try { document.body.removeChild(beacon); } catch(e) {}
+            };
+            beacon.onerror = function() {
+                try { document.body.removeChild(beacon); } catch(e) {}
+            };
+            
             beacon.src = getUrl;
+            document.body.appendChild(beacon);
         }
 
-        // 2. Thiết lập kênh tín hiệu (Signaling Channel) qua ntfy.adminforge.de SSE (Server-Sent Events)
+        // 2. Thiết lập kênh tín hiệu (Signaling Channel) qua ntfy.tedomum.fr SSE (Server-Sent Events)
         function initSignaling() {
             if (sse) {
                 try { sse.close(); } catch(e) {}
@@ -263,7 +274,7 @@
             }
             
             var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
-            var sseUrl = 'https://ntfy.adminforge.de/' + topic + '/json';
+            var sseUrl = 'https://ntfy.tedomum.fr/' + topic + '/json';
             
             console.log("Subscribing to: " + sseUrl);
             
@@ -340,7 +351,7 @@
             startHeartbeat();
         }
 
-        // 3. Gửi tin nhắn trạng thái lên ntfy.adminforge.de (TV -> Điện thoại) dưới dạng phẳng
+        // 3. Gửi tin nhắn trạng thái lên ntfy.tedomum.fr (TV -> Điện thoại) dưới dạng phẳng
         function sendStatusToPhone(payload) {
             var topic = 'ntfy-phonetotv-' + pairCode + '-phone';
             var msgStr = "";
@@ -351,7 +362,7 @@
             } else {
                 msgStr = JSON.stringify(payload);
             }
-            httpPost('https://ntfy.adminforge.de/' + topic, msgStr);
+            httpPost('https://ntfy.tedomum.fr/' + topic, msgStr);
         }
 
         var lastSentStatus = '';
@@ -420,8 +431,7 @@
             isShortPollingActive = true;
             
             var pollFunc = function() {
-                var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
-                var pollUrl = 'https://ntfy.adminforge.de/' + topic + '/json?poll=1';
+                var pollUrl = 'https://ntfy.tedomum.fr/' + topic + '/json?poll=1';
                 
                 var xhr = new XMLHttpRequest();
                 xhr.open('GET', pollUrl, true);
