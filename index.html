@@ -224,29 +224,27 @@
             initSignaling();
         }
 
-        // Helper gửi HTTP POST tương thích ngược (fetch hoặc XHR)
+        // Helper gửi HTTP qua GET (tránh preflight CORS và lỗi chặn POST trên TV cũ)
         function httpPost(url, payload) {
             var bodyString = JSON.stringify(payload);
+            var encodedMessage = encodeURIComponent(bodyString);
+            var getUrl = url + '?message=' + encodedMessage;
+            
             if (window.fetch) {
-                fetch(url, {
-                    method: 'POST',
-                    body: bodyString,
-                    headers: {
-                        'Content-Type': 'text/plain'
-                    }
+                fetch(getUrl, {
+                    method: 'GET'
                 })['catch'](function(err) {
-                    console.error("Lỗi gửi HTTP POST (fetch):", err);
+                    console.error("Lỗi gửi HTTP GET (fetch):", err);
                 });
             } else {
                 var xhr = new XMLHttpRequest();
-                xhr.open('POST', url, true);
-                xhr.setRequestHeader('Content-Type', 'text/plain');
+                xhr.open('GET', getUrl, true);
                 xhr.onreadystatechange = function() {
-                    if (xhr.readyState === 4 && xhr.status !== 200 && xhr.status !== 201) {
-                        console.error("Lỗi gửi HTTP POST (XHR): status " + xhr.status);
+                    if (xhr.readyState === 4 && xhr.status !== 200) {
+                        console.error("Lỗi gửi HTTP GET (XHR): status " + xhr.status);
                     }
                 };
-                xhr.send(bodyString);
+                xhr.send();
             }
         }
 
@@ -267,15 +265,14 @@
             if (typeof EventSource !== 'undefined') {
                 sse = new EventSource(sseUrl);
                 
-                // Sau 4 giây nếu SSE chưa hoạt động, tự động chuyển sang Short Polling
+                // Sau 6 giây nếu SSE chưa hoạt động, tự động chuyển sang Short Polling
                 sseTimeout = setTimeout(function() {
                     if (!sseConnectedOnce) {
-                        console.warn("SSE không phản hồi sau 4s. Fallback sang Short Polling.");
+                        console.warn("SSE không phản hồi sau 6s. Fallback sang Short Polling.");
                         try { sse.close(); } catch(e) {}
-                        statusText.innerText = 'CHẾ ĐỘ SHORT POLLING (DỰ PHÒNG)...';
                         startShortPolling();
                     }
-                }, 4000);
+                }, 6000);
                 
                 sse.onopen = function() {
                     console.log("Kênh tín hiệu SSE đã mở.");
@@ -316,7 +313,6 @@
                         console.warn("SSE gặp lỗi kết nối ban đầu. Fallback sang Short Polling lập tức.");
                         try { sse.close(); } catch(e) {}
                         if (sseTimeout) clearTimeout(sseTimeout);
-                        statusText.innerText = 'CHẾ ĐỘ SHORT POLLING...';
                         startShortPolling();
                     } else {
                         statusText.innerText = 'MẤT KẾT NỐI - ĐANG THỬ LẠI...';
@@ -325,7 +321,6 @@
                 };
             } else {
                 console.warn("Trình duyệt không hỗ trợ EventSource. Dùng cơ chế Short Polling.");
-                statusText.innerText = 'CHẾ ĐỘ SHORT POLLING...';
                 startShortPolling();
             }
             
