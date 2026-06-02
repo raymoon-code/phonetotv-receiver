@@ -431,6 +431,7 @@
             isShortPollingActive = true;
             
             var pollFunc = function() {
+                var topic = 'ntfy-phonetotv-' + pairCode + '-tv';
                 var pollUrl = 'https://ntfy.tedomum.fr/' + topic + '/json?poll=1';
                 
                 var xhr = new XMLHttpRequest();
