@@ -538,25 +538,6 @@
 
         // 6. Hàm tải video và giải mã (hỗ trợ cả HLS qua Hls.js và MP4 trực tiếp)
         function loadAndPlayVideo(url, startTime) {
-            // TV Bypass Mixed Content: Nếu link phim là HTTP (ví dụ link proxy http://192.168...),
-            // chúng ta bắt buộc phải chạy trang web ở chế độ HTTP. Nếu đang ở HTTPS, chuyển hướng trang web sang HTTP.
-            if (window.location.protocol === 'https:' && url.indexOf('http://') === 0) {
-                var targetPage = window.location.href.replace('https://', 'http://');
-                console.warn("Chuyển hướng trang Web Receiver sang HTTP để tránh lỗi Mixed Content: " + targetPage);
-                
-                // Gửi phản hồi cuối cùng báo hiệu đang đổi giao thức trước khi chuyển trang
-                sendStatusToPhone({
-                    type: 'heartbeat',
-                    status: 'idle',
-                    tv_connected: true
-                });
-                
-                setTimeout(function() {
-                    window.location.href = targetPage;
-                }, 500);
-                return;
-            }
-            
             console.log("Bắt đầu tải video: " + url + " từ giây: " + startTime);
             
             // Hiển thị khung video, ẩn giao diện ghép đôi
