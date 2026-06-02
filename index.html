@@ -184,20 +184,37 @@
         var _error = console.error;
         var _warn = console.warn;
         
+        function stringifyArgs(args) {
+            var processed = [];
+            for (var i = 0; i < args.length; i++) {
+                var arg = args[i];
+                if (typeof arg === 'object' && arg !== null) {
+                    try {
+                        processed.push(JSON.stringify(arg));
+                    } catch(e) {
+                        processed.push('[Object]');
+                    }
+                } else {
+                    processed.push(arg);
+                }
+            }
+            return processed.join(' ');
+        }
+
         console.log = function() {
             var args = Array.prototype.slice.call(arguments);
             _log.apply(console, args);
-            logToScreen(args.join(' '), 'log');
+            logToScreen(stringifyArgs(args), 'log');
         };
         console.error = function() {
             var args = Array.prototype.slice.call(arguments);
             _error.apply(console, args);
-            logToScreen(args.join(' '), 'error');
+            logToScreen(stringifyArgs(args), 'error');
         };
         console.warn = function() {
             var args = Array.prototype.slice.call(arguments);
             _warn.apply(console, args);
-            logToScreen(args.join(' '), 'warn');
+            logToScreen(stringifyArgs(args), 'warn');
         };
 
         // Window error tracking
@@ -225,27 +242,15 @@
         }
 
         // Helper gửi HTTP qua GET (tránh preflight CORS và lỗi chặn POST trên TV cũ)
+        // Helper gửi dữ liệu bằng Image Beacon (vượt qua hoàn toàn 100% rào cản CORS/XHR trên TV cổ)
         function httpPost(url, payload) {
             var bodyString = typeof payload === 'string' ? payload : JSON.stringify(payload);
             var encodedMessage = encodeURIComponent(bodyString);
             var getUrl = url + '?message=' + encodedMessage;
             
-            if (window.fetch) {
-                fetch(getUrl, {
-                    method: 'GET'
-                })['catch'](function(err) {
-                    console.error("Lỗi gửi HTTP GET (fetch):", err);
-                });
-            } else {
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', getUrl, true);
-                xhr.onreadystatechange = function() {
-                    if (xhr.readyState === 4 && xhr.status !== 200) {
-                        console.error("Lỗi gửi HTTP GET (XHR): status " + xhr.status);
-                    }
-                };
-                xhr.send();
-            }
+            // Tạo ảnh ẩn để gửi request GET chéo trang mà không bị CORS chặn
+            var beacon = new Image();
+            beacon.src = getUrl;
         }
 
         // 2. Thiết lập kênh tín hiệu (Signaling Channel) qua ntfy.adminforge.de SSE (Server-Sent Events)
