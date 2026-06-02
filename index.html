@@ -460,28 +460,37 @@
                 var xhr = new XMLHttpRequest();
                 xhr.open('GET', pollUrl, true);
                 xhr.onreadystatechange = function() {
-                    if (xhr.readyState === 4 && xhr.status === 200) {
+                    if (xhr.readyState === 4) {
+                        if (xhr.status !== 200) {
+                            console.warn("Short poll nhận mã trạng thái lỗi: HTTP " + xhr.status);
+                            return;
+                        }
                         try {
                             var responseText = xhr.responseText;
                             var lines = responseText.split('\n');
                             for (var i = 0; i < lines.length; i++) {
                                 var line = lines[i].trim();
                                 if (!line) continue;
-                                var msg = JSON.parse(line);
-                                if (msg.event === 'message' && msg.message) {
-                                    // Lọc trùng theo id
-                                    if (msg.id) {
-                                        if (processedMsgIds[msg.id]) {
-                                            continue;
+                                
+                                // Bọc try-catch riêng cho từng dòng JSON để tránh crash toàn bộ vòng lặp
+                                try {
+                                    var msg = JSON.parse(line);
+                                    if (msg.event === 'message' && msg.message) {
+                                        if (msg.id) {
+                                            if (processedMsgIds[msg.id]) {
+                                                continue;
+                                            }
+                                            processedMsgIds[msg.id] = true;
                                         }
-                                        processedMsgIds[msg.id] = true;
+                                        var payload = JSON.parse(msg.message);
+                                        handleControlCommand(payload);
                                     }
-                                    var payload = JSON.parse(msg.message);
-                                    handleControlCommand(payload);
+                                } catch(innerErr) {
+                                    // Bỏ qua dòng bị lỗi định dạng
                                 }
                             }
                         } catch(e) {
-                            console.error("Lỗi short poll:", e);
+                            console.error("Lỗi phân tích phản hồi short poll:", e);
                         }
                     }
                 };
