@@ -292,6 +292,7 @@
                     if (!sseConnectedOnce) {
                         console.warn("SSE không phản hồi sau 6s. Fallback sang Short Polling.");
                         try { sse.close(); } catch(e) {}
+                        sse = null;
                         startShortPolling();
                     }
                 }, 6000);
@@ -334,6 +335,7 @@
                     if (!sseConnectedOnce) {
                         console.warn("SSE gặp lỗi kết nối ban đầu. Fallback sang Short Polling lập tức.");
                         try { sse.close(); } catch(e) {}
+                        sse = null;
                         if (sseTimeout) clearTimeout(sseTimeout);
                         startShortPolling();
                     } else {
