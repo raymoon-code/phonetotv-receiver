@@ -233,9 +233,24 @@
         var processedMsgIds = {};
         var isShortPollingActive = false;
 
-        // 1. Tạo mã ngẫu nhiên 4 chữ số
+        // 1. Tạo mã ngẫu nhiên 4 chữ số (hoặc lấy từ bộ nhớ trình duyệt TV để giữ nguyên mã khi refresh)
         function generateCode() {
-            pairCode = String(Math.floor(1000 + Math.random() * 9000));
+            var savedCode = null;
+            try {
+                savedCode = localStorage.getItem('phonetotv_pairing_code');
+            } catch(e) {}
+            
+            if (savedCode && savedCode.length === 4 && !isNaN(savedCode)) {
+                pairCode = savedCode;
+                console.log("Sử dụng mã PIN cũ đã lưu: " + pairCode);
+            } else {
+                pairCode = String(Math.floor(1000 + Math.random() * 9000));
+                try {
+                    localStorage.setItem('phonetotv_pairing_code', pairCode);
+                } catch(e) {}
+                console.log("Sinh mã PIN mới: " + pairCode);
+            }
+            
             codeDisplay.innerText = pairCode;
             statusText.innerText = 'SẴN SÀNG GHÉP ĐÔI';
             initSignaling();
