@@ -226,7 +226,7 @@
 
         // Helper gửi HTTP qua GET (tránh preflight CORS và lỗi chặn POST trên TV cũ)
         function httpPost(url, payload) {
-            var bodyString = JSON.stringify(payload);
+            var bodyString = typeof payload === 'string' ? payload : JSON.stringify(payload);
             var encodedMessage = encodeURIComponent(bodyString);
             var getUrl = url + '?message=' + encodedMessage;
             
@@ -335,10 +335,18 @@
             startHeartbeat();
         }
 
-        // 3. Gửi tin nhắn trạng thái lên ntfy.adminforge.de (TV -> Điện thoại)
+        // 3. Gửi tin nhắn trạng thái lên ntfy.adminforge.de (TV -> Điện thoại) dưới dạng phẳng
         function sendStatusToPhone(payload) {
             var topic = 'ntfy-phonetotv-' + pairCode + '-phone';
-            httpPost('https://ntfy.adminforge.de/' + topic, payload);
+            var msgStr = "";
+            if (payload.type === 'heartbeat') {
+                msgStr = 'heartbeat|' + (payload.status || 'idle') + '|' + (payload.tv_connected ? 'true' : 'false');
+            } else if (payload.type === 'status') {
+                msgStr = 'status|' + (payload.status || 'paused') + '|' + Math.round(payload.currentTime || 0) + '|' + Math.round(payload.duration || 0) + '|' + (payload.speed || 1);
+            } else {
+                msgStr = JSON.stringify(payload);
+            }
+            httpPost('https://ntfy.adminforge.de/' + topic, msgStr);
         }
 
         var lastSentStatus = '';
